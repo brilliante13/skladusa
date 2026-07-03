@@ -1,0 +1,48 @@
+name: warehouse-sync
+
+# Парсить каталог і комітить docs/warehouses.json назад у репозиторій.
+# GitHub Pages віддає цей файл сайту.
+#
+# УВАГА: cron у GitHub Actions неточний (може спізнюватись на 5-15 хв) —
+# для стоків раз на 30 хв це нормально.
+on:
+  schedule:
+    - cron: "*/30 * * * *"
+  workflow_dispatch: {}
+
+# дозволяємо workflow комітити у репозиторій
+permissions:
+  contents: write
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - run: pip install -r requirements.txt
+
+      - name: Run warehouse sync
+        run: python main.py
+        env:
+          USAAUTOPARTS_API_URL: ${{ secrets.USAAUTOPARTS_API_URL }}
+          USAAUTOPARTS_LOGIN: ${{ secrets.USAAUTOPARTS_LOGIN }}
+          USAAUTOPARTS_PASSWORD: ${{ secrets.USAAUTOPARTS_PASSWORD }}
+          OUTPUT_PATH: docs/warehouses.json
+
+      - name: Commit warehouses.json
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add docs/warehouses.json
+          # комітимо лише якщо файл реально змінився
+          if git diff --staged --quiet; then
+            echo "Змін немає — коміт пропущено."
+          else
+            git commit -m "auto: update warehouses.json"
+            git push
+          fi
